@@ -876,6 +876,7 @@ const toCamelCase = (obj: any): any => {
       if (key === 'contact_id') camelKey = 'id';
       if (key === 'item_id') camelKey = 'id';
       if (key === 'fee_type_id') camelKey = 'id';
+      if (key === 'display_order') camelKey = 'order';
       
       acc[camelKey] = toCamelCase(obj[key]);
       return acc;
