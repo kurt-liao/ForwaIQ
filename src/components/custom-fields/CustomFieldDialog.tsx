@@ -124,7 +124,7 @@ export function CustomFieldDialog({ open, onOpenChange, editingField, onSubmit }
               value={formData.vendorType}
               onChange={(e) => setFormData({ ...formData, vendorType: e.target.value as any })}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
             >
               <option value="shipping">海運</option>
               <option value="trucking">拖車</option>
@@ -147,7 +147,7 @@ export function CustomFieldDialog({ open, onOpenChange, editingField, onSubmit }
                 }
               }}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
             >
               <option value="text">文字輸入</option>
               <option value="number">數字輸入</option>
@@ -224,7 +224,7 @@ export function CustomFieldDialog({ open, onOpenChange, editingField, onSubmit }
                 id="isRequired"
                 checked={formData.isRequired}
                 onChange={(e) => setFormData({ ...formData, isRequired: e.target.checked })}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-primary/20"
               />
               <label htmlFor="isRequired" className="text-sm text-gray-700">
                 設為必填欄位

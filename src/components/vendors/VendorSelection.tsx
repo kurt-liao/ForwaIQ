@@ -239,7 +239,7 @@ export function VendorSelection({ selectedVendors, setSelectedVendors, vendorTyp
                     type="checkbox"
                     checked={selectedVendors.includes(vendor.id)}
                     onChange={() => toggleVendor(vendor.id)}
-                    className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                    className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-primary/20"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-gray-900">{vendor.name}</div>

@@ -258,6 +258,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
             onChange={(e) => setCustomFieldValues({ ...customFieldValues, [field.id]: e.target.value })}
             required={field.isRequired}
             placeholder={`輸入${field.name}`}
+            className="bg-white"
           />
         );
       
@@ -269,6 +270,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
             onChange={(e) => setCustomFieldValues({ ...customFieldValues, [field.id]: e.target.value })}
             required={field.isRequired}
             placeholder={`輸入${field.name}`}
+            className="bg-white"
           />
         );
       
@@ -278,7 +280,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
             value={value}
             onChange={(e) => setCustomFieldValues({ ...customFieldValues, [field.id]: e.target.value })}
             required={field.isRequired}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
           >
             <option value="">選擇{field.name}</option>
             {field.options?.map((option) => (
@@ -296,6 +298,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
             value={value}
             onChange={(e) => setCustomFieldValues({ ...customFieldValues, [field.id]: e.target.value })}
             required={field.isRequired}
+            className="bg-white"
           />
         );
       
@@ -307,6 +310,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
             required={field.isRequired}
             placeholder={`輸入${field.name}`}
             rows={3}
+            className="bg-white"
           />
         );
       
@@ -342,6 +346,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                 onChange={(e) => setFormData({ ...formData, vendorName: e.target.value })}
                 required
                 placeholder="例：長榮海運"
+                className="bg-white"
               />
             </div>
 
@@ -351,7 +356,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                 value={formData.vendorType}
                 onChange={(e) => setFormData({ ...formData, vendorType: e.target.value as any })}
                 required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
               >
                 <option value="shipping">海運</option>
                 <option value="trucking">拖車</option>
@@ -371,6 +376,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                 required
                 step="0.01"
                 placeholder="0"
+                className="bg-white"
               />
             </div>
 
@@ -380,7 +386,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                 value={formData.currency}
                 onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
                 required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
               >
                 <option value="USD">USD</option>
                 <option value="TWD">TWD</option>
@@ -397,6 +403,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
               value={formData.validUntil}
               onChange={(e) => setFormData({ ...formData, validUntil: e.target.value })}
               required
+              className="bg-white"
             />
           </div>
 
@@ -420,7 +427,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                           setFormData({ ...formData, origin: e.target.value });
                         }
                       }}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
                     >
                       <option value="">選擇起運港</option>
                       <optgroup label="台灣">
@@ -459,6 +466,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                         onChange={(e) => setNewOrigin(e.target.value)}
                         placeholder="輸入港口名稱"
                         autoFocus
+                        className="bg-white"
                       />
                       <Button
                         type="button"
@@ -503,7 +511,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                           setFormData({ ...formData, destination: e.target.value });
                         }
                       }}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
                     >
                       <option value="">選擇目的港</option>
                       <optgroup label="台灣">
@@ -542,6 +550,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                         onChange={(e) => setNewDestination(e.target.value)}
                         placeholder="輸入港口名稱"
                         autoFocus
+                        className="bg-white"
                       />
                       <Button
                         type="button"
@@ -588,7 +597,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                             setFormData({ ...formData, carrier: e.target.value });
                           }
                         }}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
                       >
                         <option value="">選擇船公司</option>
                         {COMMON_CARRIERS.map((carrier) => (
@@ -611,6 +620,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                         onChange={(e) => setNewCarrier(e.target.value)}
                         placeholder="輸入船公司名稱"
                         autoFocus
+                        className="bg-white"
                       />
                       <Button
                         type="button"
@@ -645,7 +655,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                   <select
                     value={formData.containerSize}
                     onChange={(e) => setFormData({ ...formData, containerSize: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
                   >
                     <option value="">選擇櫃型</option>
                     <option value="20GP">20GP</option>
@@ -660,6 +670,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                     value={formData.transitTime}
                     onChange={(e) => setFormData({ ...formData, transitTime: e.target.value })}
                     placeholder="例：3-5天"
+                    className="bg-white"
                   />
                 </div>
               </div>
@@ -772,6 +783,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                     value={formData.pickupLocation}
                     onChange={(e) => setFormData({ ...formData, pickupLocation: e.target.value })}
                     placeholder="例：桃園龜山"
+                    className="bg-white"
                   />
                 </div>
                 <div>
@@ -780,6 +792,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                     value={formData.deliveryLocation}
                     onChange={(e) => setFormData({ ...formData, deliveryLocation: e.target.value })}
                     placeholder="例：基隆港"
+                    className="bg-white"
                   />
                 </div>
               </div>
@@ -790,6 +803,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                   value={formData.truckType}
                   onChange={(e) => setFormData({ ...formData, truckType: e.target.value })}
                   placeholder="例：40ft"
+                  className="bg-white"
                 />
               </div>
 
@@ -900,7 +914,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                   <select
                     value={formData.customsType}
                     onChange={(e) => setFormData({ ...formData, customsType: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
                   >
                     <option value="">選擇類型</option>
                     <option value="出口報關">出口報關</option>
@@ -914,6 +928,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                     value={formData.productCategory}
                     onChange={(e) => setFormData({ ...formData, productCategory: e.target.value })}
                     placeholder="例：電子產品"
+                    className="bg-white"
                   />
                 </div>
               </div>
@@ -1022,6 +1037,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               rows={3}
               placeholder="其他需要記錄的資訊..."
+              className="bg-white"
             />
           </div>
 

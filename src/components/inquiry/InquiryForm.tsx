@@ -41,7 +41,7 @@ export function InquiryForm({ formData, setFormData, formRef }: InquiryFormProps
             <select
               value={formData.vendorType}
               onChange={(e) => setFormData({ ...formData, vendorType: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
             >
               <option value="all">全部類型</option>
               <option value="shipping">海運</option>
@@ -78,7 +78,7 @@ export function InquiryForm({ formData, setFormData, formRef }: InquiryFormProps
                   <select
                     value={formData.containerSize}
                     onChange={(e) => setFormData({ ...formData, containerSize: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
                     <option value="20GP">20GP</option>
                     <option value="40GP">40GP</option>
@@ -133,7 +133,7 @@ export function InquiryForm({ formData, setFormData, formRef }: InquiryFormProps
                   <select
                     value={formData.customsType}
                     onChange={(e) => setFormData({ ...formData, customsType: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
                     <option value="出口報關">出口報關</option>
                     <option value="進口報關">進口報關</option>

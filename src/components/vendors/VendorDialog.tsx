@@ -155,7 +155,7 @@ export function VendorDialog({ open, onOpenChange, editingVendor, onSubmit }: Ve
                   value={formData.type}
                   onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
                   required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
                 >
                   <option value="shipping">海運公司</option>
                   <option value="trucking">拖車公司</option>
@@ -179,7 +179,7 @@ export function VendorDialog({ open, onOpenChange, editingVendor, onSubmit }: Ve
                 <select
                   value={formData.rating}
                   onChange={(e) => setFormData({ ...formData, rating: parseInt(e.target.value) })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
                 >
                   <option value={5}>⭐⭐⭐⭐⭐ (5)</option>
                   <option value={4}>⭐⭐⭐⭐ (4)</option>
