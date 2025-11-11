@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Plus } from 'lucide-react';
-import type { Quote } from '../../App';
+import type { Quote, QuoteLineItem, FeeType } from '../../App'; // 導入 QuoteLineItem 和 FeeType
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { setupFormValidation } from '../../utils/validation/formValidation';
 import type { CustomField } from '../../pages/CustomFieldsPage';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { toast } from 'sonner';
 
 interface AddQuoteDialogProps {
   open: boolean;
@@ -79,14 +80,25 @@ const ALL_PORTS = [
   ...COMMON_PORTS.others,
 ];
 
+// 將英文 vendorType 轉換為中文 category
+const getCategoryFromVendorType = (vendorType: string): string => {
+  switch (vendorType) {
+    case 'shipping': return '海運';
+    case 'trucking': return '拖車';
+    case 'customs': return '報關';
+    default: return vendorType;
+  }
+};
+
 export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: AddQuoteDialogProps) {
   const formRef = useRef<HTMLFormElement>(null);
   
   const [formData, setFormData] = useState({
+    vendorId: '',
     vendorName: '',
     vendorType: 'shipping' as 'shipping' | 'trucking' | 'customs',
-    price: 0,
-    currency: 'USD',
+    // price: 0, // 移除
+    // currency: 'USD', // 移除
     validUntil: '',
     origin: '',
     destination: '',
@@ -101,6 +113,11 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
     notes: '',
   });
 
+  // 新增 lineItems 狀態
+  const [lineItems, setLineItems] = useState<QuoteLineItem[]>([
+    { cost: 0, currency: 'USD', descriptionLegacy: '' } // 預設一個空項目
+  ]);
+
   const [customCarriers, setCustomCarriers] = useState<string[]>([]);
   const [showCustomCarrier, setShowCustomCarrier] = useState(false);
   const [newCarrier, setNewCarrier] = useState('');
@@ -111,10 +128,20 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
   const [newOrigin, setNewOrigin] = useState('');
   const [newDestination, setNewDestination] = useState('');
 
+  // Vendor selection state
+  const [vendors, setVendors] = useState<any[]>([]);
+  const [showAddVendor, setShowAddVendor] = useState(false);
+  const [newVendorName, setNewVendorName] = useState('');
+
   // Custom fields state
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
   const [activeOptionalFields, setActiveOptionalFields] = useState<Set<string>>(new Set());
+
+  // Fee types state
+  const [feeTypes, setFeeTypes] = useState<FeeType[]>([]);
+  const [showAddFeeType, setShowAddFeeType] = useState(false);
+  const [newFeeTypeName, setNewFeeTypeName] = useState('');
 
   // Setup form validation
   useEffect(() => {
@@ -142,12 +169,39 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
     return () => document.removeEventListener('click', handleClickOutside);
   }, [open]);
 
-  // Load custom fields when vendor type changes
+  // Load custom fields and vendors when vendor type changes or when editing
   useEffect(() => {
-    if (open) {
+    if (open && formData.vendorType) {
       loadCustomFields(formData.vendorType);
+      loadVendors(formData.vendorType);
     }
   }, [formData.vendorType, open]);
+
+  // Load fee types when dialog opens
+  useEffect(() => {
+    if (open) {
+      loadFeeTypes();
+    }
+  }, [open]);
+
+  // When vendor type changes, clear invalid fee types from line items
+  useEffect(() => {
+    if (feeTypes.length > 0) {
+      setLineItems(prevItems =>
+        prevItems.map(item => {
+          if (item.feeTypeId) {
+            const feeTypeId = item.feeTypeId; // Extract to avoid TypeScript issues
+            const feeType = feeTypes.find(ft => ft.feeTypeId === feeTypeId);
+            if (!feeType || feeType.category !== getCategoryFromVendorType(formData.vendorType)) {
+              // Clear invalid fee type
+              return { ...item, feeTypeId: undefined, descriptionLegacy: '' };
+            }
+          }
+          return item;
+        })
+      );
+    }
+  }, [formData.vendorType, feeTypes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadCustomFields = async (vendorType: 'shipping' | 'trucking' | 'customs') => {
     try {
@@ -173,13 +227,157 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
     }
   };
 
+  const loadFeeTypes = async () => {
+    try {
+      console.log('載入費用類型');
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-368a4ded/fee-types`,
+        {
+          headers: {
+            'Authorization': `Bearer ${publicAnonKey}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const types = await response.json();
+        console.log(`成功載入 ${types.length} 個費用類型:`, types);
+        console.log('費用類型詳細資訊:', types.map((t: any) => ({ feeTypeId: t.feeTypeId, name: t.name, category: t.category })));
+        setFeeTypes(types);
+      } else {
+        console.error('載入費用類型失敗:', response.status, response.statusText);
+      }
+    } catch (error) {
+      console.error('載入費用類型時發生錯誤:', error);
+    }
+  };
+
+  const addNewFeeType = async (name: string, lineItemIndex: number) => {
+    try {
+      const feeTypeData = {
+        name: name.trim(),
+        category: getCategoryFromVendorType(formData.vendorType),
+      };
+
+      console.log('新增費用類型:', feeTypeData);
+
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-368a4ded/fee-types`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${publicAnonKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(feeTypeData),
+        }
+      );
+
+      if (response.ok) {
+        const newFeeType = await response.json();
+        console.log('成功新增費用類型:', newFeeType);
+
+        // 更新費用類型列表
+        setFeeTypes([...feeTypes, newFeeType]);
+
+        // 將新費用項目設置為當前項目
+        setLineItems(prevItems =>
+          prevItems.map((item, i) => {
+            if (i === lineItemIndex) {
+              return { ...item, feeTypeId: newFeeType.feeTypeId, descriptionLegacy: newFeeType.name };
+            }
+            return item;
+          })
+        );
+
+        // 隱藏輸入框並清空輸入
+        setShowAddFeeType(false);
+        setNewFeeTypeName('');
+
+        toast.success('費用項目新增成功');
+      } else {
+        throw new Error(`HTTP ${response.status}`);
+      }
+    } catch (error) {
+      console.error('新增費用項目失敗:', error);
+      toast.error('新增費用項目失敗，請稍後再試');
+    }
+  };
+
+  const loadVendors = async (vendorType: string) => {
+    try {
+      console.log('載入供應商列表', vendorType);
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-368a4ded/vendors`,
+        {
+          headers: {
+            'Authorization': `Bearer ${publicAnonKey}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const vendorsData = await response.json();
+        console.log('API 返回的廠商數據:', vendorsData);
+        console.log('過濾類型:', vendorType);
+
+        // 只載入當前類型的供應商，並確保資料完整性
+        const filteredVendors = vendorsData
+          .filter((v: any) => {
+            const matches = v && v.type === vendorType && v.vendorId && v.name;
+            if (!matches) {
+              console.log('廠商被過濾掉:', v, '原因:', {
+                hasV: !!v,
+                typeMatch: v?.type === vendorType,
+                hasVendorId: !!v?.vendorId,
+                hasName: !!v?.name
+              });
+            }
+            return matches;
+          })
+          .map((v: any) => ({
+            id: v.vendorId,
+            name: v.name,
+            type: v.type,
+            contacts: v.contacts || []
+          }));
+
+        console.log(`成功載入 ${filteredVendors.length} 個${vendorType}供應商:`, filteredVendors);
+
+        // 如果過濾後沒有廠商，作為後備載入所有廠商
+        if (filteredVendors.length === 0) {
+          console.warn(`沒有找到 ${vendorType} 類型的廠商，載入所有廠商作為後備`);
+          const allVendors = vendorsData
+            .filter((v: any) => v && v.vendorId && v.name)
+            .map((v: any) => ({
+              id: v.vendorId,
+              name: v.name,
+              type: v.type,
+              contacts: v.contacts || []
+            }));
+          setVendors(allVendors);
+        } else {
+          setVendors(filteredVendors);
+        }
+      } else {
+        console.error('載入供應商失敗:', response.status, response.statusText);
+        setVendors([]); // 確保不會有 undefined 資料
+      }
+    } catch (error) {
+      console.error('載入供應商時發生錯誤:', error);
+      setVendors([]); // 確保不會有 undefined 資料
+    }
+  };
+
+  // Set form data when editing quote changes
   useEffect(() => {
     if (editingQuote) {
       setFormData({
+        vendorId: editingQuote.vendorId ? editingQuote.vendorId.toString() : '',
         vendorName: editingQuote.vendorName,
         vendorType: editingQuote.vendorType,
-        price: editingQuote.price,
-        currency: editingQuote.currency,
+        // price: editingQuote.price, // 移除
+        // currency: editingQuote.currency, // 移除
         validUntil: editingQuote.validUntil.split('T')[0],
         origin: editingQuote.origin || '',
         destination: editingQuote.destination || '',
@@ -193,6 +391,10 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
         productCategory: editingQuote.productCategory || '',
         notes: editingQuote.notes || '',
       });
+      // 載入 lineItems
+      setLineItems(editingQuote.lineItems && editingQuote.lineItems.length > 0
+        ? editingQuote.lineItems
+        : [{ cost: 0, currency: 'USD', descriptionLegacy: '' }]);
       // Load custom field values from editing quote
       const existingCustomFields = (editingQuote as any).customFields || {};
       setCustomFieldValues(existingCustomFields);
@@ -204,17 +406,56 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
         }
       });
       setActiveOptionalFields(activeFields);
+
+      // 載入廠商列表和自定義字段
+      if (editingQuote.vendorType && typeof editingQuote.vendorType === 'string') {
+        loadVendors(editingQuote.vendorType);
+        loadCustomFields(editingQuote.vendorType);
+      } else {
+        console.warn('編輯報價時 vendorType 無效:', editingQuote.vendorType);
+        // 如果沒有 vendorType，載入所有廠商作為後備
+        loadVendors('shipping'); // 預設載入海運廠商
+        loadCustomFields('shipping');
+      }
     } else {
       resetForm();
     }
-  }, [editingQuote, open]);
+  }, [editingQuote]);
+
+  // Ensure vendor selection is correct when vendors list loads and we're editing
+  useEffect(() => {
+    if (editingQuote && vendors.length > 0) {
+      // 如果有 vendorId，根據 ID 找到廠商
+      if (formData.vendorId) {
+        const vendor = vendors.find(v => v.id && v.id.toString() === formData.vendorId);
+        if (vendor && vendor.name && formData.vendorName !== vendor.name) {
+          setFormData(prev => ({
+            ...prev,
+            vendorName: vendor.name
+          }));
+        }
+      }
+      // 如果沒有 vendorId 但有 vendorName，根據名稱找到廠商
+      else if (formData.vendorName) {
+        const vendor = vendors.find(v => v.name === formData.vendorName && v.type === editingQuote.vendorType);
+        if (vendor) {
+          setFormData(prev => ({
+            ...prev,
+            vendorId: vendor.id.toString(),
+            vendorName: vendor.name
+          }));
+        }
+      }
+    }
+  }, [vendors, editingQuote]);
 
   const resetForm = () => {
     setFormData({
+      vendorId: '',
       vendorName: '',
       vendorType: 'shipping',
-      price: 0,
-      currency: 'USD',
+      // price: 0, // 移除
+      // currency: 'USD', // 移除
       validUntil: '',
       origin: '',
       destination: '',
@@ -230,16 +471,84 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
     });
     setCustomFieldValues({});
     setActiveOptionalFields(new Set());
+    setLineItems([{ cost: 0, currency: 'USD', descriptionLegacy: '' }]); // 重置 lineItems
+  };
+
+  // 新增報價明細項目
+  const addLineItem = () => {
+    setLineItems([...lineItems, { cost: 0, currency: 'USD', descriptionLegacy: '' }]);
+  };
+
+  // 刪除報價明細項目
+  const removeLineItem = (index: number) => {
+    if (lineItems.length > 1) {
+      setLineItems(lineItems.filter((_, i) => i !== index));
+    }
+  };
+
+  // 更新報價明細項目
+  const updateLineItem = (index: number, field: keyof QuoteLineItem, value: any) => {
+    const updatedItems = lineItems.map((item, i) =>
+      i === index ? { ...item, [field]: value } : item
+    );
+    setLineItems(updatedItems);
+  };
+
+  // 當選擇費用類型時，自動填入 feeTypeId 和 descriptionLegacy
+  const handleFeeTypeChange = (index: number, feeTypeId: string) => {
+    const selectedFeeType = feeTypes.find(type => type.feeTypeId.toString() === feeTypeId);
+
+    setLineItems(prevItems =>
+      prevItems.map((item, i) => {
+        if (i === index) {
+          if (selectedFeeType) {
+            const feeTypeIdNumber = parseInt(feeTypeId, 10);
+            return { ...item, feeTypeId: feeTypeIdNumber, descriptionLegacy: selectedFeeType.name };
+          } else {
+            return { ...item, feeTypeId: undefined, descriptionLegacy: '' };
+          }
+        }
+        return item;
+      })
+    );
+  };
+
+  // 計算總價和主要幣別
+  const calculateTotalAndCurrency = () => {
+    if (lineItems.length === 0) return { total: 0, currency: 'USD' };
+
+    const total = lineItems.reduce((sum, item) => sum + item.cost, 0);
+    const currencies = [...new Set(lineItems.map(item => item.currency))];
+    const currency = currencies.length === 1 ? currencies[0] : 'USD'; // 如果有多種幣別，預設為 USD
+
+    return { total, currency };
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    const { total, currency } = calculateTotalAndCurrency();
+
+    // 將前端的 camelCase 字段轉換為後端的 snake_case
+    const processedLineItems = lineItems.map(item => ({
+      ...item,
+      fee_type_id: item.feeTypeId, // 轉換為 snake_case 用於後端
+      description_legacy: item.descriptionLegacy, // 轉換為 snake_case 用於後端
+      display_order: item.order, // 轉換為 snake_case 用於後端
+      // 移除前端使用的 camelCase 版本
+      feeTypeId: undefined,
+      descriptionLegacy: undefined,
+      order: undefined,
+    }));
+
     const submitData = {
       ...formData,
+      total_cost_display: total,
+      base_currency: currency,
+      lineItems: processedLineItems,
       customFields: customFieldValues,
     };
-    
+
     if (editingQuote) {
       onSubmit({ ...editingQuote, ...submitData });
     } else {
@@ -282,7 +591,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
             required={field.isRequired}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
           >
-            <option value="">選擇{field.name}</option>
+            <option key={`select-${field.name}`} value="">選擇{field.name}</option>
             {field.options?.map((option) => (
               <option key={option} value={option}>
                 {option}
@@ -341,13 +650,121 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-gray-700 mb-2">廠商名稱 *</label>
-              <Input
-                value={formData.vendorName}
-                onChange={(e) => setFormData({ ...formData, vendorName: e.target.value })}
-                required
-                placeholder="例：長榮海運"
-                className="bg-white"
-              />
+              <div className="relative">
+                <select
+                  value={formData.vendorId}
+                  onChange={(e) => {
+                    const selectedValue = e.target.value;
+                    if (selectedValue === '__add_new__') {
+                      setShowAddVendor(true);
+                      setNewVendorName('');
+                    } else {
+                      const selectedVendor = vendors.find(v => v.id && v.id.toString() === selectedValue);
+                      if (selectedVendor) {
+                        setFormData({
+                          ...formData,
+                          vendorId: selectedValue,
+                          vendorName: selectedVendor.name
+                        });
+                      } else {
+                        // 如果找不到供應商，可能是資料同步問題，只設置 vendorId
+                        setFormData({
+                          ...formData,
+                          vendorId: selectedValue,
+                          vendorName: '' // 或者保持原有的名稱
+                        });
+                      }
+                    }
+                  }}
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
+                >
+                  <option key="select-vendor" value="">選擇廠商</option>
+                  {vendors.filter(vendor => vendor.id).map((vendor) => (
+                    <option key={vendor.id} value={vendor.id}>
+                      {vendor.name}
+                    </option>
+                  ))}
+                  <option key="__add_new__" value="__add_new__" className="text-blue-600 font-medium">
+                    + 新增廠商
+                  </option>
+                </select>
+              </div>
+
+              {/* 新增廠商輸入框 */}
+              {showAddVendor && (
+                <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex gap-2">
+                    <Input
+                      value={newVendorName}
+                      onChange={(e) => setNewVendorName(e.target.value)}
+                      placeholder="輸入新廠商名稱"
+                      className="flex-1"
+                      autoFocus
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={async () => {
+                        if (newVendorName.trim()) {
+                          try {
+                            const vendorData = {
+                              name: newVendorName.trim(),
+                              type: formData.vendorType,
+                              contacts: [],
+                              rating: 5,
+                              notes: '通過報價系統新增',
+                            };
+
+                            const response = await fetch(
+                              `https://${projectId}.supabase.co/functions/v1/make-server-368a4ded/vendors`,
+                              {
+                                method: 'POST',
+                                headers: {
+                                  'Authorization': `Bearer ${publicAnonKey}`,
+                                  'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify(vendorData),
+                              }
+                            );
+
+                            if (response.ok) {
+                              const newVendor = await response.json();
+                              setVendors([...vendors, newVendor]);
+                              setFormData({
+                                ...formData,
+                                vendorId: newVendor.id,
+                                vendorName: newVendor.name
+                              });
+                              setShowAddVendor(false);
+                              setNewVendorName('');
+                              toast.success('廠商新增成功');
+                            } else {
+                              throw new Error(`HTTP ${response.status}`);
+                            }
+                          } catch (error) {
+                            console.error('新增廠商失敗:', error);
+                            toast.error('新增廠商失敗，請稍後再試');
+                          }
+                        }
+                      }}
+                    >
+                      新增
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowAddVendor(false);
+                        setNewVendorName('');
+                      }}
+                    >
+                      取消
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>
@@ -358,41 +775,161 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                 required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
               >
-                <option value="shipping">海運</option>
-                <option value="trucking">拖車</option>
-                <option value="customs">報關</option>
+                <option key="vendor-type-shipping" value="shipping">海運</option>
+                <option key="vendor-type-trucking" value="trucking">拖車</option>
+                <option key="vendor-type-customs" value="customs">報關</option>
               </select>
             </div>
           </div>
 
-          {/* Price Info */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-700 mb-2">價格 *</label>
-              <Input
-                type="number"
-                value={formData.price}
-                onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
-                required
-                step="0.01"
-                placeholder="0"
-                className="bg-white"
-              />
+          {/* Quote Line Items */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium text-gray-900">報價明細</h3>
+              <Button
+                type="button"
+                onClick={addLineItem}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                新增項目
+              </Button>
             </div>
 
-            <div>
-              <label className="block text-sm text-gray-700 mb-2">幣別 *</label>
-              <select
-                value={formData.currency}
-                onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
-              >
-                <option value="USD">USD</option>
-                <option value="TWD">TWD</option>
-                <option value="CNY">CNY</option>
-                <option value="EUR">EUR</option>
-              </select>
+            <div className="space-y-3">
+              {lineItems.map((item, index) => (
+                <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-medium text-gray-700">項目 {index + 1}</h4>
+                    {lineItems.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeLineItem(index)}
+                        className="text-red-600 hover:text-red-800 text-sm"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-2">費用項目 *</label>
+                      {!showAddFeeType ? (
+                        <select
+                          value={item.feeTypeId?.toString() || ''}
+                          onChange={(e) => {
+                            if (e.target.value === '__add_new__') {
+                              setShowAddFeeType(true);
+                              setNewFeeTypeName('');
+                            } else {
+                              handleFeeTypeChange(index, e.target.value);
+                            }
+                          }}
+                          required
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
+                        >
+                          <option key="select-fee-type" value="">選擇費用項目</option>
+                          {feeTypes
+                            .filter((feeType) => feeType.category === getCategoryFromVendorType(formData.vendorType))
+                            .map((feeType) => (
+                              <option key={feeType.feeTypeId} value={feeType.feeTypeId}>
+                                {feeType.name}
+                              </option>
+                            ))}
+                          <option key="__add_new__" value="__add_new__" className="text-blue-600 font-medium">
+                            + 新增費用項目
+                          </option>
+                        </select>
+                      ) : (
+                        <div className="flex gap-2">
+                          <Input
+                            value={newFeeTypeName}
+                            onChange={(e) => setNewFeeTypeName(e.target.value)}
+                            placeholder="輸入費用項目名稱"
+                            autoFocus
+                            className="flex-1 bg-white"
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={async () => {
+                              if (newFeeTypeName.trim()) {
+                                await addNewFeeType(newFeeTypeName.trim(), index);
+                              }
+                            }}
+                          >
+                            新增
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setShowAddFeeType(false);
+                              setNewFeeTypeName('');
+                            }}
+                          >
+                            取消
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-2">費用 *</label>
+                      <Input
+                        type="number"
+                        value={item.cost}
+                        onChange={(e) => updateLineItem(index, 'cost', parseFloat(e.target.value) || 0)}
+                        required
+                        step="0.01"
+                        placeholder="0"
+                        className="bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-2">幣別 *</label>
+                      <select
+                        value={item.currency}
+                        onChange={(e) => updateLineItem(index, 'currency', e.target.value)}
+                        required
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
+                      >
+                        <option key="currency-usd" value="USD">USD</option>
+                        <option key="currency-twd" value="TWD">TWD</option>
+                        <option key="currency-cny" value="CNY">CNY</option>
+                        <option key="currency-eur" value="EUR">EUR</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-2">備註</label>
+                      <Input
+                        value={item.remarks || ''}
+                        onChange={(e) => updateLineItem(index, 'remarks', e.target.value)}
+                        placeholder="選填"
+                        className="bg-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* 總價顯示 */}
+            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-blue-900">總計：</span>
+                <span className="text-lg font-bold text-blue-900">
+                  {calculateTotalAndCurrency().currency} ${calculateTotalAndCurrency().total.toLocaleString()}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -687,7 +1224,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                           variant="outline"
                           size="sm"
                           className="h-7 text-xs"
-                          onClick={(e) => {
+                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                             const btn = e.currentTarget;
                             const menu = btn.nextElementSibling as HTMLElement;
                             if (menu) {
@@ -819,7 +1356,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                           variant="outline"
                           size="sm"
                           className="h-7 text-xs"
-                          onClick={(e) => {
+                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                             const btn = e.currentTarget;
                             const menu = btn.nextElementSibling as HTMLElement;
                             if (menu) {
@@ -945,7 +1482,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
                           variant="outline"
                           size="sm"
                           className="h-7 text-xs"
-                          onClick={(e) => {
+                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                             const btn = e.currentTarget;
                             const menu = btn.nextElementSibling as HTMLElement;
                             if (menu) {

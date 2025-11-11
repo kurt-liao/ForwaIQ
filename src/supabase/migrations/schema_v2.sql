@@ -184,7 +184,7 @@ COMMENT ON COLUMN inquiries.status IS '詢價狀態';
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS quotes (
     quote_id SERIAL PRIMARY KEY,
-    inquiry_id INTEGER NOT NULL REFERENCES inquiries(inquiry_id) ON DELETE CASCADE,
+    inquiry_id INTEGER REFERENCES inquiries(inquiry_id) ON DELETE CASCADE, -- 可選，允許直接創建報價
     vendor_id INTEGER NOT NULL REFERENCES vendors(vendor_id),
     
     -- 報價基本資訊
@@ -211,7 +211,7 @@ CREATE TABLE IF NOT EXISTS quotes (
     
     -- 有效期與備註
     valid_until DATE,
-    remarks TEXT,
+    notes TEXT,
     
     -- 自定義欄位值
     custom_fields JSONB DEFAULT '{}',

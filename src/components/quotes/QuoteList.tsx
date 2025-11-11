@@ -85,6 +85,19 @@ export function QuoteList({ quotes, onEdit, onDelete }: QuoteListProps) {
     return new Date(validUntil) < new Date();
   };
 
+  // 計算報價總價和主要幣別
+  const calculateTotalAndCurrency = (quote: Quote) => {
+    if (!quote.lineItems || quote.lineItems.length === 0) {
+      return { total: 0, currency: 'USD' };
+    }
+
+    const total = quote.lineItems.reduce((sum, item) => sum + item.cost, 0);
+    const currencies = [...new Set(quote.lineItems.map(item => item.currency))];
+    const currency = currencies.length === 1 ? currencies[0] : 'USD'; // 如果有多種幣別，預設為 USD
+
+    return { total, currency };
+  };
+
   if (quotes.length === 0) {
     return (
       <div className="text-center py-12 text-gray-500">
@@ -177,7 +190,10 @@ export function QuoteList({ quotes, onEdit, onDelete }: QuoteListProps) {
               <div className="flex items-center justify-end gap-1 mb-2">
                 <DollarSign className="w-4 h-4 text-gray-400" />
                 <div className="text-xl text-gray-900">
-                  {quote.currency} ${quote.price.toLocaleString()}
+                  {(() => {
+                    const { total, currency } = calculateTotalAndCurrency(quote);
+                    return `${currency} $${total.toLocaleString()}`;
+                  })()}
                 </div>
               </div>
 

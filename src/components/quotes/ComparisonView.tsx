@@ -10,9 +10,17 @@ export function ComparisonView({ quotes }: ComparisonViewProps) {
   const [sortBy, setSortBy] = useState<'price' | 'validUntil'>('price');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
+  // 計算報價總價
+  const getQuoteTotal = (quote: Quote) => {
+    if (!quote.lineItems || quote.lineItems.length === 0) return 0;
+    return quote.lineItems.reduce((sum, item) => sum + item.cost, 0);
+  };
+
   const sortedQuotes = [...quotes].sort((a, b) => {
     if (sortBy === 'price') {
-      return sortOrder === 'asc' ? a.price - b.price : b.price - a.price;
+      const priceA = getQuoteTotal(a);
+      const priceB = getQuoteTotal(b);
+      return sortOrder === 'asc' ? priceA - priceB : priceB - priceA;
     } else {
       const dateA = new Date(a.validUntil).getTime();
       const dateB = new Date(b.validUntil).getTime();
@@ -20,12 +28,12 @@ export function ComparisonView({ quotes }: ComparisonViewProps) {
     }
   });
 
-  const avgPrice = quotes.length > 0 
-    ? quotes.reduce((sum, q) => sum + q.price, 0) / quotes.length 
+  const avgPrice = quotes.length > 0
+    ? quotes.reduce((sum, q) => sum + getQuoteTotal(q), 0) / quotes.length
     : 0;
 
-  const minPrice = quotes.length > 0 ? Math.min(...quotes.map(q => q.price)) : 0;
-  const maxPrice = quotes.length > 0 ? Math.max(...quotes.map(q => q.price)) : 0;
+  const minPrice = quotes.length > 0 ? Math.min(...quotes.map(q => getQuoteTotal(q))) : 0;
+  const maxPrice = quotes.length > 0 ? Math.max(...quotes.map(q => getQuoteTotal(q))) : 0;
 
   const toggleSort = (field: 'price' | 'validUntil') => {
     if (sortBy === field) {
@@ -109,9 +117,10 @@ export function ComparisonView({ quotes }: ComparisonViewProps) {
           </thead>
           <tbody className="divide-y divide-gray-200">
             {sortedQuotes.map((quote, index) => {
-              const priceDiff = quote.price - avgPrice;
+              const quoteTotal = getQuoteTotal(quote);
+              const priceDiff = quoteTotal - avgPrice;
               const diffPercent = avgPrice > 0 ? ((priceDiff / avgPrice) * 100).toFixed(1) : '0';
-              const isLowest = quote.price === minPrice;
+              const isLowest = quoteTotal === minPrice;
               
               return (
                 <tr key={quote.id} className={isLowest ? 'bg-green-50' : 'hover:bg-gray-50'}>
@@ -149,7 +158,11 @@ export function ComparisonView({ quotes }: ComparisonViewProps) {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="text-sm text-gray-900">
-                      {quote.currency} ${quote.price.toLocaleString()}
+                      {(() => {
+                        const currencies = [...new Set(quote.lineItems?.map(item => item.currency) || [])];
+                        const currency = currencies.length === 1 ? currencies[0] : 'USD';
+                        return `${currency} $${quoteTotal.toLocaleString()}`;
+                      })()}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right">

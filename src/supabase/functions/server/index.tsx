@@ -8,95 +8,230 @@ const app = new Hono();
 app.use('*', cors());
 app.use('*', logger(console.log));
 
+// QuoteLineItem interface
+interface QuoteLineItem {
+  id?: string; // 對應 item_id，新增時可能沒有
+  quote_id?: string; // 對應 quote_id，新增時可能沒有
+  feeTypeId?: number; // 對應 fee_type_id（前端使用 camelCase）
+  description_legacy?: string;
+  cost: number;
+  currency: string;
+  remarks?: string;
+  display_order?: number;
+  created_at?: string;
+}
+
 // Quote interface
 interface Quote {
   id: string;
   vendorName: string;
   vendorType: 'shipping' | 'trucking' | 'customs';
-  price: number;
-  currency: string;
+  // price: number; // 移除
+  // currency: string; // 移除
   validUntil: string;
   createdAt: string;
   updatedAt: string;
-  
+
   // Shipping specific
   origin?: string;
   destination?: string;
   carrier?: string;
   transitTime?: string;
   containerSize?: string;
-  
+
   // Trucking specific
   pickupLocation?: string;
   deliveryLocation?: string;
   truckType?: string;
-  
+
   // Customs specific
   customsType?: string;
   productCategory?: string;
-  
+
   notes?: string;
-  
+
   // Custom fields
   customFields?: Record<string, any>;
+
+  // 新增報價明細項目
+  lineItems?: QuoteLineItem[];
 }
 
 // Get all quotes
 app.get('/make-server-368a4ded/quotes', async (c) => {
   try {
     const supabase = getSupabaseClient();
-    
+
+    // Fetch quotes with their line items using Supabase's embedded resources
     const response = await fetch(
-      `${supabase.url}/rest/v1/quotes?order=total_cost_display.asc.nullslast,created_at.desc`,
+      `${supabase.url}/rest/v1/quotes?select=quote_id,vendor_id,inquiry_id,vendor_name,vendor_type,total_cost_display,base_currency,origin,destination,carrier,transit_time,container_size,pickup_location,delivery_location,truck_type,customs_type,product_category,valid_until,notes,custom_fields,received_at,created_at,updated_at,quote_line_items(*)&order=total_cost_display.asc.nullslast,created_at.desc`,
       {
         headers: supabase.headers,
       }
     );
-    
+
     if (!response.ok) {
       throw new Error(`Supabase error: ${response.status} ${response.statusText}`);
     }
-    
+
     const quotes = await response.json();
     console.log(`Retrieved ${quotes.length} quotes from Supabase`);
-    
+
     // Convert to camelCase for frontend
     const camelCaseQuotes = toCamelCase(quotes);
-    
-    return c.json(camelCaseQuotes);
+
+    // Rename quote_line_items to lineItems
+    const quotesWithLineItems = camelCaseQuotes.map((quote: any) => ({
+      ...quote,
+      lineItems: quote.quoteLineItems || [],
+    }));
+
+    // Remove quoteLineItems field
+    quotesWithLineItems.forEach((quote: any) => {
+      delete quote.quoteLineItems;
+    });
+
+    return c.json(quotesWithLineItems);
   } catch (error) {
     console.error('Error fetching quotes:', error);
     return c.json({ error: 'Failed to fetch quotes', details: String(error) }, 500);
   }
 });
 
+// Migrate existing quotes to add vendor_id
+app.post('/make-server-368a4ded/migrate-vendor-ids', async (c) => {
+  try {
+    const supabase = getSupabaseClient();
+
+    // Update quotes that have vendor_name but no vendor_id
+    const updateResponse = await fetch(
+      `${supabase.url}/rest/v1/quotes?vendor_id=is.null`,
+      {
+        method: 'PATCH',
+        headers: {
+          ...supabase.headers,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify({
+          // This will be handled by a database function or trigger
+        }),
+      }
+    );
+
+    if (!updateResponse.ok) {
+      throw new Error(`Migration failed: ${updateResponse.status}`);
+    }
+
+    // Actually, let's do this with raw SQL
+    const sqlResponse = await fetch(
+      `${supabase.url}/rest/v1/rpc/migrate_vendor_ids`,
+      {
+        method: 'POST',
+        headers: {
+          ...supabase.headers,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (sqlResponse.ok) {
+      const result = await sqlResponse.json();
+      return c.json({ success: true, migrated: result });
+    } else {
+      // Fallback: get all quotes without vendor_id and vendors, then update manually
+      const quotesResponse = await fetch(
+        `${supabase.url}/rest/v1/quotes?select=quote_id,vendor_name,vendor_type&vendor_id=is.null`,
+        {
+          headers: supabase.headers,
+        }
+      );
+
+      const vendorsResponse = await fetch(
+        `${supabase.url}/rest/v1/vendors?select=vendor_id,name,type`,
+        {
+          headers: supabase.headers,
+        }
+      );
+
+      if (quotesResponse.ok && vendorsResponse.ok) {
+        const quotes = await quotesResponse.json();
+        const vendors = await vendorsResponse.json();
+
+        let migrated = 0;
+        for (const quote of quotes) {
+          const matchingVendor = vendors.find((v: any) =>
+            v.name === quote.vendor_name && v.type === quote.vendor_type
+          );
+
+          if (matchingVendor) {
+            const updateResponse = await fetch(
+              `${supabase.url}/rest/v1/quotes?quote_id=eq.${quote.quote_id}`,
+              {
+                method: 'PATCH',
+                headers: {
+                  ...supabase.headers,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  vendor_id: matchingVendor.vendor_id,
+                }),
+              }
+            );
+
+            if (updateResponse.ok) {
+              migrated++;
+            }
+          }
+        }
+
+        return c.json({ success: true, migrated, total: quotes.length });
+      }
+    }
+
+    return c.json({ error: 'Migration failed' }, 500);
+  } catch (error) {
+    console.error('Migration error:', error);
+    return c.json({ error: 'Migration failed', details: String(error) }, 500);
+  }
+});
+
 // Get single quote
 app.get('/make-server-368a4ded/quotes/:id', async (c) => {
   try {
-    const id = c.req.param('id');
+    const id = parseInt(c.req.param('id'), 10);
     const supabase = getSupabaseClient();
-    
+
     const response = await fetch(
-      `${supabase.url}/rest/v1/quotes?quote_id=eq.${id}`,
+      `${supabase.url}/rest/v1/quotes?quote_id=eq.${id}&select=*,quote_line_items(*)`,
       {
         headers: supabase.headers,
       }
     );
-    
+
     if (!response.ok) {
       throw new Error(`Supabase error: ${response.status} ${response.statusText}`);
     }
-    
+
     const quotes = await response.json();
-    
+
     if (!quotes || quotes.length === 0) {
       return c.json({ error: 'Quote not found' }, 404);
     }
-    
+
     // Convert to camelCase for frontend
     const camelCaseQuote = toCamelCase(quotes[0]);
-    
-    return c.json(camelCaseQuote);
+
+    // Rename quote_line_items to lineItems
+    const quoteWithLineItems = {
+      ...camelCaseQuote,
+      lineItems: camelCaseQuote.quoteLineItems || [],
+    };
+
+    // Remove quoteLineItems field
+    delete quoteWithLineItems.quoteLineItems;
+
+    return c.json(quoteWithLineItems);
   } catch (error) {
     console.error('Error fetching quote:', error);
     return c.json({ error: 'Failed to fetch quote', details: String(error) }, 500);
@@ -107,23 +242,51 @@ app.get('/make-server-368a4ded/quotes/:id', async (c) => {
 app.post('/make-server-368a4ded/quotes', async (c) => {
   try {
     const body = await c.req.json();
-    
+
     // Validate required fields
-    if (!body.vendorName || !body.vendorType || !body.price || !body.currency || !body.validUntil) {
+    if (!body.vendorName || !body.vendorType || !body.validUntil || !body.lineItems || !Array.isArray(body.lineItems) || body.lineItems.length === 0) {
       return c.json({ error: 'Missing required fields' }, 400);
     }
-    
+
+    // Validate line items
+    for (let i = 0; i < body.lineItems.length; i++) {
+      const item = body.lineItems[i];
+      // 支援兩種格式：snake_case (description_legacy) 和 camelCase (descriptionLegacy)
+      const description = item.description_legacy || item.descriptionLegacy;
+      if (!description || !item.cost || !item.currency) {
+        return c.json({ error: `Line item ${i + 1}: Missing required fields (description_legacy or descriptionLegacy, cost, currency)` }, 400);
+      }
+      if (item.cost <= 0) {
+        return c.json({ error: `Line item ${i + 1}: Cost must be greater than 0` }, 400);
+      }
+    }
+
     const supabase = getSupabaseClient();
-    
+
+    // Calculate total cost and base currency
+    const totalCost = body.lineItems.reduce((sum: number, item: any) => sum + item.cost, 0);
+    const currencies = [...new Set(body.lineItems.map((item: any) => item.currency))];
+    const baseCurrency = currencies.length === 1 ? currencies[0] : 'USD'; // If multiple currencies, default to USD
+
+    // Handle inquiry_id - optional, use provided or null
+    let inquiryId = body.inquiryId || null;
+
+    // Handle vendor_id - required from frontend
+    let vendorId = body.vendorId;
+    if (!vendorId) {
+      throw new Error('vendor_id is required');
+    }
+
     // Convert to snake_case for database
     const dbData = {
-      vendor_id: body.vendorId || null,
+      inquiry_id: inquiryId,
+      vendor_id: vendorId,
       vendor_name: body.vendorName,
       vendor_type: body.vendorType,
-      price: parseFloat(body.price),
-      currency: body.currency,
+      total_cost_display: totalCost,
+      base_currency: baseCurrency,
       valid_until: body.validUntil,
-      
+
       // Optional fields
       origin: body.origin || null,
       destination: body.destination || null,
@@ -136,11 +299,11 @@ app.post('/make-server-368a4ded/quotes', async (c) => {
       customs_type: body.customsType || null,
       product_category: body.productCategory || null,
       notes: body.notes || null,
-      
+
       // Custom fields
       custom_fields: body.customFields ? JSON.stringify(body.customFields) : '{}',
     };
-    
+
     const response = await fetch(
       `${supabase.url}/rest/v1/quotes`,
       {
@@ -152,20 +315,58 @@ app.post('/make-server-368a4ded/quotes', async (c) => {
         body: JSON.stringify(dbData),
       }
     );
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`Supabase error: ${response.status} ${errorText}`);
     }
-    
+
     const createdQuotes = await response.json();
     const createdQuote = createdQuotes[0];
-    
-    console.log(`Created quote ${createdQuote.id} for vendor ${createdQuote.vendor_name}`);
-    
+    const quoteId = createdQuote.quote_id;
+
+    console.log(`Created quote ${quoteId} for vendor ${createdQuote.vendor_name}`);
+
+    // Create line items
+    const lineItemsData = body.lineItems.map((item: any, index: number) => ({
+      quote_id: quoteId,
+      fee_type_id: item.fee_type_id || item.feeTypeId, // 支援兩種格式
+      description_legacy: item.description_legacy || item.descriptionLegacy, // 支援兩種格式
+      cost: item.cost,
+      currency: item.currency,
+      remarks: item.remarks || null,
+      display_order: index,
+    }));
+
+    const lineItemsResponse = await fetch(
+      `${supabase.url}/rest/v1/quote_line_items`,
+      {
+        method: 'POST',
+        headers: {
+          ...supabase.headers,
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify(lineItemsData),
+      }
+    );
+
+    if (!lineItemsResponse.ok) {
+      const errorText = await lineItemsResponse.text();
+      console.error('Failed to create line items:', errorText);
+      // Note: Quote is already created, we might want to delete it or handle this error differently
+      throw new Error(`Failed to create line items: ${errorText}`);
+    }
+
+    const createdLineItems = await lineItemsResponse.json();
+    console.log(`Created ${createdLineItems.length} line items for quote ${quoteId}`);
+
     // Convert to camelCase for frontend
     const camelCaseQuote = toCamelCase(createdQuote);
-    
+    const camelCaseLineItems = toCamelCase(createdLineItems);
+
+    // Add lineItems to the response
+    camelCaseQuote.lineItems = camelCaseLineItems;
+
     return c.json(camelCaseQuote, 201);
   } catch (error) {
     console.error('Error creating quote:', error);
@@ -258,18 +459,46 @@ app.post('/make-server-368a4ded/quotes/batch', async (c) => {
 // Update quote
 app.put('/make-server-368a4ded/quotes/:id', async (c) => {
   try {
-    const id = c.req.param('id');
+    const id = parseInt(c.req.param('id'), 10);
     const body = await c.req.json();
-    
+
+    // Validate line items if provided
+    if (body.lineItems !== undefined) {
+      if (!Array.isArray(body.lineItems) || body.lineItems.length === 0) {
+        return c.json({ error: 'lineItems must be a non-empty array' }, 400);
+      }
+
+      for (let i = 0; i < body.lineItems.length; i++) {
+        const item = body.lineItems[i];
+        // 支援兩種格式：snake_case (description_legacy) 和 camelCase (descriptionLegacy)
+        const description = item.description_legacy || item.descriptionLegacy;
+        if (!description || !item.cost || !item.currency) {
+          return c.json({ error: `Line item ${i + 1}: Missing required fields (description_legacy or descriptionLegacy, cost, currency)` }, 400);
+        }
+        if (item.cost <= 0) {
+          return c.json({ error: `Line item ${i + 1}: Cost must be greater than 0` }, 400);
+        }
+      }
+    }
+
     const supabase = getSupabaseClient();
-    
+
     // Convert to snake_case for database
     const dbData: any = {};
     if (body.vendorId !== undefined) dbData.vendor_id = body.vendorId;
     if (body.vendorName !== undefined) dbData.vendor_name = body.vendorName;
     if (body.vendorType !== undefined) dbData.vendor_type = body.vendorType;
-    if (body.price !== undefined) dbData.price = parseFloat(body.price);
-    if (body.currency !== undefined) dbData.currency = body.currency;
+
+    // Recalculate total cost and base currency if lineItems are provided
+    if (body.lineItems !== undefined) {
+      const totalCost = body.lineItems.reduce((sum: number, item: any) => sum + item.cost, 0);
+      const currencies = [...new Set(body.lineItems.map((item: any) => item.currency))];
+      const baseCurrency = currencies.length === 1 ? currencies[0] : 'USD';
+
+      dbData.total_cost_display = totalCost;
+      dbData.base_currency = baseCurrency;
+    }
+
     if (body.validUntil !== undefined) dbData.valid_until = body.validUntil;
     if (body.origin !== undefined) dbData.origin = body.origin;
     if (body.destination !== undefined) dbData.destination = body.destination;
@@ -283,7 +512,7 @@ app.put('/make-server-368a4ded/quotes/:id', async (c) => {
     if (body.productCategory !== undefined) dbData.product_category = body.productCategory;
     if (body.notes !== undefined) dbData.notes = body.notes;
     if (body.customFields !== undefined) dbData.custom_fields = JSON.stringify(body.customFields);
-    
+
     const response = await fetch(
       `${supabase.url}/rest/v1/quotes?quote_id=eq.${id}`,
       {
@@ -295,25 +524,95 @@ app.put('/make-server-368a4ded/quotes/:id', async (c) => {
         body: JSON.stringify(dbData),
       }
     );
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`Supabase error: ${response.status} ${errorText}`);
     }
-    
+
     const updatedQuotes = await response.json();
-    
+
     if (!updatedQuotes || updatedQuotes.length === 0) {
       return c.json({ error: 'Quote not found' }, 404);
     }
-    
+
     const updatedQuote = updatedQuotes[0];
     console.log(`Updated quote ${id}`);
-    
+
+    // Update line items if provided
+    if (body.lineItems !== undefined) {
+      // Delete existing line items
+      await fetch(
+        `${supabase.url}/rest/v1/quote_line_items?quote_id=eq.${id}`,
+        {
+          method: 'DELETE',
+          headers: supabase.headers,
+        }
+      );
+
+      // Create new line items
+      const lineItemsData = body.lineItems.map((item: any, index: number) => ({
+        quote_id: parseInt(id),
+        fee_type_id: item.fee_type_id || item.feeTypeId, // 支援兩種格式
+        description_legacy: item.description_legacy || item.descriptionLegacy, // 支援兩種格式
+        cost: item.cost,
+        currency: item.currency,
+        remarks: item.remarks || null,
+        display_order: index,
+      }));
+
+      const lineItemsResponse = await fetch(
+        `${supabase.url}/rest/v1/quote_line_items`,
+        {
+          method: 'POST',
+          headers: {
+            ...supabase.headers,
+            'Prefer': 'return=representation',
+          },
+          body: JSON.stringify(lineItemsData),
+        }
+      );
+
+      if (!lineItemsResponse.ok) {
+        const errorText = await lineItemsResponse.text();
+        console.error('Failed to update line items:', errorText);
+        throw new Error(`Failed to update line items: ${errorText}`);
+      }
+
+      const updatedLineItems = await lineItemsResponse.json();
+      console.log(`Updated ${updatedLineItems.length} line items for quote ${id}`);
+    }
+
+    // Fetch updated quote with line items
+    const finalResponse = await fetch(
+      `${supabase.url}/rest/v1/quotes?quote_id=eq.${id}&select=*,quote_line_items(*)`,
+      {
+        headers: supabase.headers,
+      }
+    );
+
+    if (!finalResponse.ok) {
+      throw new Error(`Failed to fetch updated quote: ${finalResponse.status}`);
+    }
+
+    const finalQuotes = await finalResponse.json();
+    if (!finalQuotes || finalQuotes.length === 0) {
+      return c.json({ error: 'Quote not found after update' }, 404);
+    }
+
     // Convert to camelCase for frontend
-    const camelCaseQuote = toCamelCase(updatedQuote);
-    
-    return c.json(camelCaseQuote);
+    const camelCaseQuote = toCamelCase(finalQuotes[0]);
+
+    // Rename quote_line_items to lineItems
+    const quoteWithLineItems = {
+      ...camelCaseQuote,
+      lineItems: camelCaseQuote.quoteLineItems || [],
+    };
+
+    // Remove quoteLineItems field
+    delete quoteWithLineItems.quoteLineItems;
+
+    return c.json(quoteWithLineItems);
   } catch (error) {
     console.error('Error updating quote:', error);
     return c.json({ error: 'Failed to update quote', details: String(error) }, 500);
@@ -323,7 +622,7 @@ app.put('/make-server-368a4ded/quotes/:id', async (c) => {
 // Delete quote
 app.delete('/make-server-368a4ded/quotes/:id', async (c) => {
   try {
-    const id = c.req.param('id');
+    const id = parseInt(c.req.param('id'), 10);
     const supabase = getSupabaseClient();
     
     const response = await fetch(
@@ -409,6 +708,17 @@ app.post('/make-server-368a4ded/quotes/search', async (c) => {
   }
 });
 
+// FeeType interface
+interface FeeType {
+  id: string;
+  name: string;
+  category: string;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Vendor interface
 interface Vendor {
   id: string;
@@ -423,6 +733,92 @@ interface Vendor {
   createdAt: string;
   updatedAt: string;
 }
+
+// Get all fee types
+app.get('/make-server-368a4ded/fee-types', async (c) => {
+  try {
+    const supabase = getSupabaseClient();
+
+    const response = await fetch(
+      `${supabase.url}/rest/v1/fee_types?order=name.asc`,
+      {
+        headers: supabase.headers,
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Supabase error: ${response.status} ${response.statusText}`);
+    }
+
+    const feeTypes = await response.json();
+    console.log(`Retrieved ${feeTypes.length} fee types from Supabase`);
+
+    // Convert to camelCase for frontend
+    const camelCaseFeeTypes = toCamelCase(feeTypes);
+
+    return c.json(camelCaseFeeTypes);
+  } catch (error) {
+    console.error('Error fetching fee types:', error);
+    return c.json({ error: 'Failed to fetch fee types', details: String(error) }, 500);
+  }
+});
+
+// Create new fee type
+app.post('/make-server-368a4ded/fee-types', async (c) => {
+  try {
+    const body = await c.req.json();
+
+    // Validate required fields
+    if (!body.name || !body.category) {
+      return c.json({ error: 'Missing required fields (name, category)' }, 400);
+    }
+
+    // Validate category
+    if (!['海運', '拖車', '報關'].includes(body.category)) {
+      return c.json({ error: 'Invalid category. Must be one of: 海運, 拖車, 報關' }, 400);
+    }
+
+    const supabase = getSupabaseClient();
+
+    // Convert to snake_case for database
+    const dbData = {
+      name: body.name.trim(),
+      category: body.category,
+      description: body.description || null,
+      is_active: true,
+    };
+
+    const response = await fetch(
+      `${supabase.url}/rest/v1/fee_types`,
+      {
+        method: 'POST',
+        headers: {
+          ...supabase.headers,
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify(dbData),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Supabase error: ${response.status} ${errorText}`);
+    }
+
+    const createdFeeTypes = await response.json();
+    const createdFeeType = createdFeeTypes[0];
+
+    console.log(`Created fee type ${createdFeeType.fee_type_id}: ${createdFeeType.name}`);
+
+    // Convert to camelCase for frontend
+    const camelCaseFeeType = toCamelCase(createdFeeType);
+
+    return c.json(camelCaseFeeType, 201);
+  } catch (error) {
+    console.error('Error creating fee type:', error);
+    return c.json({ error: 'Failed to create fee type', details: String(error) }, 500);
+  }
+});
 
 // Get all vendors
 app.get('/make-server-368a4ded/vendors', async (c) => {
@@ -869,13 +1265,13 @@ const toCamelCase = (obj: any): any => {
     return Object.keys(obj).reduce((acc, key) => {
       let camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
       
-      // 特殊處理：將主鍵欄位統一轉換為 'id'
-      if (key === 'quote_id') camelKey = 'id';
-      if (key === 'vendor_id') camelKey = 'id';
-      if (key === 'inquiry_id') camelKey = 'id';
-      if (key === 'contact_id') camelKey = 'id';
-      if (key === 'item_id') camelKey = 'id';
-      if (key === 'fee_type_id') camelKey = 'id';
+      // 特殊處理：將主鍵欄位轉換為適當的字段名稱，避免衝突
+      if (key === 'quote_id') camelKey = 'id'; // Quote的主鍵
+      if (key === 'vendor_id') camelKey = 'vendorId'; // Quote中的供應商ID
+      if (key === 'inquiry_id') camelKey = 'inquiryId'; // Quote中的詢價單ID
+      if (key === 'contact_id') camelKey = 'id'; // VendorContact的主鍵
+      if (key === 'item_id') camelKey = 'itemId'; // QuoteLineItem的主鍵，避免與Quote的id衝突
+      if (key === 'fee_type_id') camelKey = 'feeTypeId'; // 費用類型ID
       if (key === 'display_order') camelKey = 'order';
       
       acc[camelKey] = toCamelCase(obj[key]);

@@ -10,7 +10,11 @@ import { ImportDialog } from '../components/quotes/ImportDialog';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 
-export function QuotesPage() {
+interface QuotesPageProps {
+  urlParams?: Record<string, string>;
+}
+
+export function QuotesPage({ urlParams }: QuotesPageProps) {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'list' | 'comparison'>('list');
@@ -31,6 +35,40 @@ export function QuotesPage() {
   useEffect(() => {
     loadQuotes();
   }, []);
+
+  // Handle URL path for editing quotes
+  const checkForQuoteToEdit = () => {
+    const path = window.location.pathname;
+    const pathParts = path.split('/').filter(Boolean);
+
+    // Check if path is /quotes/{id}
+    if (pathParts.length === 2 && pathParts[0] === 'quotes' && quotes.length > 0 && !isAddDialogOpen) {
+      const editId = pathParts[1];
+      console.log('Checking for quote to edit:', editId, 'quotes loaded:', quotes.length);
+      const quoteToEdit = quotes.find(q => q.id.toString() === editId);
+      if (quoteToEdit) {
+        console.log('Found quote to edit:', quoteToEdit);
+        setEditingQuote(quoteToEdit);
+        setIsAddDialogOpen(true);
+        // Clear the edit path after opening the dialog
+        setTimeout(() => {
+          window.history.replaceState(null, '', '/quotes');
+        }, 100);
+      } else {
+        console.log('Quote not found for id:', editId);
+        console.log('Available quotes:', quotes.map(q => q.id));
+      }
+    }
+  };
+
+  useEffect(() => {
+    checkForQuoteToEdit();
+  }, [quotes]); // Check when quotes load
+
+  // Check for quote to edit on page load or navigation
+  useEffect(() => {
+    checkForQuoteToEdit();
+  }, []); // Check on component mount
 
   const loadQuotes = async () => {
     try {
@@ -58,13 +96,21 @@ export function QuotesPage() {
     }
   };
 
+  // 計算報價總價
+  const getQuoteTotal = (quote: Quote) => {
+    if (!quote.lineItems || quote.lineItems.length === 0) return 0;
+    return quote.lineItems.reduce((sum, item) => sum + item.cost, 0);
+  };
+
   const filteredQuotes = quotes.filter((quote) => {
     if (filters.vendorType !== 'all' && quote.vendorType !== filters.vendorType) return false;
     if (filters.origin && quote.origin && !quote.origin.toLowerCase().includes(filters.origin.toLowerCase())) return false;
     if (filters.destination && quote.destination && !quote.destination.toLowerCase().includes(filters.destination.toLowerCase())) return false;
     if (filters.containerSize && quote.containerSize !== filters.containerSize) return false;
-    if (filters.minPrice && quote.price < parseFloat(filters.minPrice)) return false;
-    if (filters.maxPrice && quote.price > parseFloat(filters.maxPrice)) return false;
+
+    const totalPrice = getQuoteTotal(quote);
+    if (filters.minPrice && totalPrice < parseFloat(filters.minPrice)) return false;
+    if (filters.maxPrice && totalPrice > parseFloat(filters.maxPrice)) return false;
     if (filters.searchTerm) {
       const searchLower = filters.searchTerm.toLowerCase();
       return (

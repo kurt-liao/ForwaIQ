@@ -29,10 +29,10 @@ import { Toaster } from "./components/ui/sonner";
 
 export interface Quote {
   id: string;
+  inquiryId?: string; // 可選，關聯的詢價單 ID
+  vendorId: string;
   vendorName: string;
   vendorType: "shipping" | "trucking" | "customs";
-  price: number;
-  currency: string;
   validUntil: string;
   createdAt: string;
   updatedAt: string;
@@ -57,6 +57,31 @@ export interface Quote {
 
   // Custom fields
   customFields?: Record<string, any>;
+
+  // 新增報價明細項目
+  lineItems?: QuoteLineItem[];
+}
+
+export interface QuoteLineItem {
+  itemId?: string; // 對應 item_id，新增時可能沒有
+  quote_id?: string; // 對應 quote_id，新增時可能沒有
+  feeTypeId?: number; // 對應 fee_type_id
+  descriptionLegacy?: string; // 對應 description_legacy
+  cost: number;
+  currency: string;
+  remarks?: string;
+  order?: number; // 對應 display_order
+  createdAt?: string; // 對應 created_at
+}
+
+export interface FeeType {
+  feeTypeId: number;
+  name: string;
+  category: string;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface VendorContact {
@@ -101,18 +126,96 @@ const navigation = [
 export default function App() {
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [urlParams, setUrlParams] = useState<Record<string, string>>({});
 
   // Set HTML lang attribute to Chinese
   useEffect(() => {
     document.documentElement.lang = "zh-TW";
   }, []);
 
+  // Handle URL path changes and page navigation
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const path = window.location.pathname.slice(1); // Remove leading '/'
+      const [page, ...pathParts] = path.split('/');
+
+      // Route mapping
+      let currentPage = 'dashboard';
+      const params: Record<string, string> = {};
+
+      if (!page || page === '') {
+        currentPage = 'dashboard';
+      } else if (page === 'quotes') {
+        currentPage = 'quotes';
+        if (pathParts[0]) {
+          params.edit = pathParts[0];
+        }
+      } else if (page === 'vendors') {
+        currentPage = 'vendors';
+      } else if (page === 'inquiry') {
+        currentPage = 'inquiry';
+      } else if (page === 'custom-fields') {
+        currentPage = 'custom-fields';
+      } else {
+        currentPage = 'dashboard';
+      }
+
+      setCurrentPage(currentPage);
+      setUrlParams(params);
+    };
+
+    // Initial load
+    handleUrlChange();
+
+    // Listen for popstate events (back/forward buttons)
+    window.addEventListener('popstate', handleUrlChange);
+    return () => window.removeEventListener('popstate', handleUrlChange);
+  }, []);
+
+  const navigateTo = (page: string, params?: Record<string, string>) => {
+    let path = `/${page}`;
+
+    if (params?.edit && page === 'quotes') {
+      path = `/${page}/${params.edit}`;
+    }
+
+    // Update URL without page reload
+    window.history.pushState({}, '', path);
+
+    // Manually trigger the URL change handler
+    const newPath = path.slice(1);
+    const [newPage, ...pathParts] = newPath.split('/');
+
+    let currentPage = 'dashboard';
+    const newParams: Record<string, string> = {};
+
+    if (!newPage || newPage === '') {
+      currentPage = 'dashboard';
+    } else if (newPage === 'quotes') {
+      currentPage = 'quotes';
+      if (pathParts[0]) {
+        newParams.edit = pathParts[0];
+      }
+    } else if (newPage === 'vendors') {
+      currentPage = 'vendors';
+    } else if (newPage === 'inquiry') {
+      currentPage = 'inquiry';
+    } else if (newPage === 'custom-fields') {
+      currentPage = 'custom-fields';
+    } else {
+      currentPage = 'dashboard';
+    }
+
+    setCurrentPage(currentPage);
+    setUrlParams(newParams);
+  };
+
   const renderPage = () => {
     switch (currentPage) {
       case "dashboard":
-        return <DashboardPage />;
+        return <DashboardPage navigateTo={navigateTo} />;
       case "quotes":
-        return <QuotesPage />;
+        return <QuotesPage urlParams={urlParams} />;
       case "vendors":
         return <VendorsPage />;
       case "inquiry":
@@ -120,7 +223,7 @@ export default function App() {
       case "custom-fields":
         return <CustomFieldsPage />;
       default:
-        return <DashboardPage />;
+        return <DashboardPage navigateTo={navigateTo} />;
     }
   };
 
@@ -156,7 +259,7 @@ export default function App() {
                       <SidebarMenuItem key={item.id}>
                         <SidebarMenuButton
                           onClick={() =>
-                            setCurrentPage(item.id)
+                            navigateTo(item.id)
                           }
                           isActive={currentPage === item.id}
                           className="w-full"

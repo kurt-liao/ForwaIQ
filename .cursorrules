@@ -1115,4 +1115,5 @@ quotes.map(quote => formatPrice(quote.price));
 ---
 
 **記住：好的程式碼不僅能運行，更要易讀、易維護、易擴展！**
+**記住：用中文回覆！**
 

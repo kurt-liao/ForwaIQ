@@ -3,7 +3,11 @@ import { BarChart3, TrendingUp, TrendingDown, DollarSign, Package, Clock, AlertC
 import type { Quote, Vendor } from '../App';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 
-export function DashboardPage() {
+interface DashboardPageProps {
+  navigateTo?: (page: string, params?: Record<string, string>) => void;
+}
+
+export function DashboardPage({ navigateTo }: DashboardPageProps) {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,13 +43,25 @@ export function DashboardPage() {
   const validQuotes = quotes.filter(q => new Date(q.validUntil) > now);
   const expiredQuotes = quotes.filter(q => new Date(q.validUntil) <= now);
   
-  const expiringSoon = quotes.filter(q => {
+  // 需要注意的報價：即將到期（7天內）或已經過期
+  const quotesNeedingAttention = quotes.filter(q => {
     const daysUntil = (new Date(q.validUntil).getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
-    return daysUntil > 0 && daysUntil <= 7;
+    return daysUntil <= 7; // 7天內到期或已經過期
+  }).sort((a, b) => {
+    // 按到期時間排序，過期的排在前面
+    const aDays = (new Date(a.validUntil).getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+    const bDays = (new Date(b.validUntil).getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+    return aDays - bDays;
   });
 
-  const avgPrice = quotes.length > 0 
-    ? quotes.reduce((sum, q) => sum + q.price, 0) / quotes.length 
+  // 計算報價總價
+  const getQuoteTotal = (quote: Quote) => {
+    if (!quote.lineItems || quote.lineItems.length === 0) return 0;
+    return quote.lineItems.reduce((sum, item) => sum + item.cost, 0);
+  };
+
+  const avgPrice = quotes.length > 0
+    ? quotes.reduce((sum, q) => sum + getQuoteTotal(q), 0) / quotes.length
     : 0;
 
   const newVendorsThisMonth = vendors.filter(v => {
@@ -136,11 +152,11 @@ export function DashboardPage() {
 
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="text-sm text-gray-500">即將到期</div>
+              <div className="text-sm text-gray-500">需要注意</div>
               <Clock className="w-4 h-4 text-orange-500" />
             </div>
-            <div className="text-2xl text-orange-600">{expiringSoon.length}</div>
-            <p className="text-xs text-gray-500 mt-1">7天內到期需更新</p>
+            <div className="text-2xl text-orange-600">{quotesNeedingAttention.length}</div>
+            <p className="text-xs text-gray-500 mt-1">7天內到期或已過期</p>
           </div>
         </div>
 
@@ -186,15 +202,19 @@ export function DashboardPage() {
         </div>
 
         {/* Alerts */}
-        {expiringSoon.length > 0 && (
+        {quotesNeedingAttention.length > 0 && (
           <div className="bg-orange-50 rounded-lg border border-orange-200 p-6">
             <div className="flex items-center gap-2 text-orange-800 mb-4">
               <AlertCircle className="w-5 h-5" />
               <h3>需要注意的報價</h3>
             </div>
             <div className="space-y-2">
-              {expiringSoon.slice(0, 5).map((quote) => (
-                <div key={quote.id} className="flex items-center justify-between bg-white p-3 rounded-lg">
+              {quotesNeedingAttention.slice(0, 5).map((quote) => (
+                <div
+                  key={quote.id}
+                  className="flex items-center justify-between bg-white p-3 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={() => navigateTo && navigateTo('quotes', { edit: quote.id.toString() })}
+                >
                   <div>
                     <div className="text-sm text-gray-900">{quote.vendorName}</div>
                     {quote.origin && quote.destination && (
@@ -204,9 +224,19 @@ export function DashboardPage() {
                     )}
                   </div>
                   <div className="text-right">
-                    <div className="text-sm text-gray-900">{quote.currency} ${quote.price}</div>
-                    <div className="text-xs text-orange-600">
-                      {getDaysUntilExpiry(quote.validUntil)} 天後到期
+                    <div className="text-sm text-gray-900">
+                      {(() => {
+                        const total = getQuoteTotal(quote);
+                        const currencies = [...new Set(quote.lineItems?.map(item => item.currency) || [])];
+                        const currency = currencies.length === 1 ? currencies[0] : 'USD';
+                        return `${currency} $${total.toLocaleString()}`;
+                      })()}
+                    </div>
+                    <div className={`text-xs ${getDaysUntilExpiry(quote.validUntil) < 0 ? 'text-red-600' : 'text-orange-600'}`}>
+                      {getDaysUntilExpiry(quote.validUntil) < 0
+                        ? `${Math.abs(getDaysUntilExpiry(quote.validUntil))} 天前過期`
+                        : `${getDaysUntilExpiry(quote.validUntil)} 天後到期`
+                      }
                     </div>
                   </div>
                 </div>
