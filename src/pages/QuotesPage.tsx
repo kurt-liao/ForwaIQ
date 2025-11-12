@@ -9,6 +9,7 @@ import { AddQuoteDialog } from '../components/quotes/AddQuoteDialog';
 import { ImportDialog } from '../components/quotes/ImportDialog';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
+import { calculateTotalTWD } from '../utils/currency';
 
 interface QuotesPageProps {
   urlParams?: Record<string, string>;
@@ -96,10 +97,10 @@ export function QuotesPage({ urlParams }: QuotesPageProps) {
     }
   };
 
-  // 計算報價總價
+  // 計算報價總價（轉換為 TWD 後相加）
   const getQuoteTotal = (quote: Quote) => {
     if (!quote.lineItems || quote.lineItems.length === 0) return 0;
-    return quote.lineItems.reduce((sum, item) => sum + item.cost, 0);
+    return calculateTotalTWD(quote.lineItems);
   };
 
   const filteredQuotes = quotes.filter((quote) => {

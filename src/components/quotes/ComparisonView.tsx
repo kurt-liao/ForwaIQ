@@ -10,10 +10,13 @@ export function ComparisonView({ quotes }: ComparisonViewProps) {
   const [sortBy, setSortBy] = useState<'price' | 'validUntil'>('price');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
-  // 計算報價總價
+  // 計算報價總價（轉換為 TWD 後相加）
   const getQuoteTotal = (quote: Quote) => {
     if (!quote.lineItems || quote.lineItems.length === 0) return 0;
-    return quote.lineItems.reduce((sum, item) => sum + item.cost, 0);
+    return quote.lineItems.reduce((sum, item) => {
+      const rate = { TWD: 1, USD: 31, CNY: 4.3, EUR: 33.5 }[item.currency] || 1;
+      return sum + item.cost * rate;
+    }, 0);
   };
 
   const sortedQuotes = [...quotes].sort((a, b) => {

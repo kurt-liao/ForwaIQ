@@ -17,6 +17,8 @@ export function VendorsPage() {
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [sortField, setSortField] = useState<'name' | 'type' | 'rating'>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
     loadVendors();
@@ -49,18 +51,52 @@ export function VendorsPage() {
 
   const filteredVendors = vendors.filter((vendor) => {
     const searchLower = searchTerm.toLowerCase();
-    const matchesSearch = 
+    const matchesSearch =
       vendor.name.toLowerCase().includes(searchLower) ||
-      vendor.contacts?.some(c => 
+      vendor.contacts?.some(c =>
         c.name?.toLowerCase().includes(searchLower) ||
         c.email?.toLowerCase().includes(searchLower) ||
         c.phone?.toLowerCase().includes(searchLower)
       );
-    
+
     const matchesType = filterType === 'all' || vendor.type === filterType;
-    
+
     return matchesSearch && matchesType;
   });
+
+  const sortedVendors = [...filteredVendors].sort((a, b) => {
+    let aValue: any, bValue: any;
+
+    switch (sortField) {
+      case 'name':
+        aValue = a.name.toLowerCase();
+        bValue = b.name.toLowerCase();
+        break;
+      case 'type':
+        aValue = a.type;
+        bValue = b.type;
+        break;
+      case 'rating':
+        aValue = a.rating || 0;
+        bValue = b.rating || 0;
+        break;
+      default:
+        return 0;
+    }
+
+    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const handleSort = (field: 'name' | 'type' | 'rating') => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
 
   const handleAddVendor = async (vendorData: any) => {
     try {
@@ -354,9 +390,12 @@ export function VendorsPage() {
           </div>
         )}
 
-        {!loading && filteredVendors.length > 0 && (
+        {!loading && sortedVendors.length > 0 && (
           <VendorTable
-            vendors={filteredVendors}
+            vendors={sortedVendors}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onSort={handleSort}
             onEdit={(vendor) => {
               setEditingVendor(vendor);
               setIsDialogOpen(true);

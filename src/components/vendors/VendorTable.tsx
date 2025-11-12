@@ -1,14 +1,17 @@
-import { Edit, Trash2, Ship, Truck, FileText, Mail, Phone, MapPin, Star, User } from 'lucide-react';
+import { Edit, Trash2, Ship, Truck, FileText, Mail, Phone, MapPin, Star, User, ChevronUp, ChevronDown } from 'lucide-react';
 import type { Vendor } from '../../App';
 import { Button } from '../ui/button';
 
 interface VendorTableProps {
   vendors: Vendor[];
+  sortField: 'name' | 'type' | 'rating';
+  sortDirection: 'asc' | 'desc';
+  onSort: (field: 'name' | 'type' | 'rating') => void;
   onEdit: (vendor: Vendor) => void;
   onDelete: (id: string) => void;
 }
 
-export function VendorTable({ vendors, onEdit, onDelete }: VendorTableProps) {
+export function VendorTable({ vendors, sortField, sortDirection, onSort, onEdit, onDelete }: VendorTableProps) {
   const getTypeIcon = (type: string) => {
     switch (type) {
       case 'shipping':
@@ -40,16 +43,30 @@ export function VendorTable({ vendors, onEdit, onDelete }: VendorTableProps) {
     return vendor.contacts.find(c => c.isPrimary) || vendor.contacts[0];
   };
 
+  const SortableHeader = ({ field, children }: { field: 'name' | 'type' | 'rating'; children: React.ReactNode }) => (
+    <th
+      className="px-6 py-3 text-left text-sm text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center gap-1">
+        {children}
+        {sortField === field && (
+          sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+        )}
+      </div>
+    </th>
+  );
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
       <table className="w-full">
         <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
-            <th className="px-6 py-3 text-left text-sm text-gray-600">廠商名稱</th>
-            <th className="px-6 py-3 text-left text-sm text-gray-600">類型</th>
+            <SortableHeader field="name">廠商名稱</SortableHeader>
+            <SortableHeader field="type">類型</SortableHeader>
             <th className="px-6 py-3 text-left text-sm text-gray-600">主要聯絡人</th>
             <th className="px-6 py-3 text-left text-sm text-gray-600">聯絡方式</th>
-            <th className="px-6 py-3 text-left text-sm text-gray-600">評分</th>
+            <SortableHeader field="rating">評分</SortableHeader>
             <th className="px-6 py-3 text-right text-sm text-gray-600">操作</th>
           </tr>
         </thead>

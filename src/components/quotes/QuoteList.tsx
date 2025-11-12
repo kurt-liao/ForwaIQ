@@ -85,17 +85,29 @@ export function QuoteList({ quotes, onEdit, onDelete }: QuoteListProps) {
     return new Date(validUntil) < new Date();
   };
 
-  // 計算報價總價和主要幣別
+  // 計算報價總價和主要幣別（轉換為 TWD 後相加）
   const calculateTotalAndCurrency = (quote: Quote) => {
     if (!quote.lineItems || quote.lineItems.length === 0) {
-      return { total: 0, currency: 'USD' };
+      return { total: 0, currency: 'TWD' };
     }
 
-    const total = quote.lineItems.reduce((sum, item) => sum + item.cost, 0);
-    const currencies = [...new Set(quote.lineItems.map(item => item.currency))];
-    const currency = currencies.length === 1 ? currencies[0] : 'USD'; // 如果有多種幣別，預設為 USD
+    const totalTWD = quote.lineItems.reduce((sum, item) => {
+      const rate = { TWD: 1, USD: 31, CNY: 4.3, EUR: 33.5 }[item.currency] || 1;
+      return sum + item.cost * rate;
+    }, 0);
 
-    return { total, currency };
+    const currencies = [...new Set(quote.lineItems.map(item => item.currency))];
+
+    // 如果只有一種貨幣，使用該貨幣顯示總價
+    if (currencies.length === 1) {
+      const currency = currencies[0];
+      const rate = { TWD: 1, USD: 31, CNY: 4.3, EUR: 33.5 }[currency] || 1;
+      const total = totalTWD / rate;
+      return { total, currency };
+    }
+
+    // 如果有多種貨幣，顯示 TWD 總價
+    return { total: totalTWD, currency: 'TWD' };
   };
 
   if (quotes.length === 0) {

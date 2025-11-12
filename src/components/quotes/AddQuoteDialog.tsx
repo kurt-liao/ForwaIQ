@@ -8,6 +8,7 @@ import { setupFormValidation } from '../../utils/validation/formValidation';
 import type { CustomField } from '../../pages/CustomFieldsPage';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { toast } from 'sonner';
+import { calculateTotalTWD, convertFromTWD, getCurrencySymbol } from '../../utils/currency';
 
 interface AddQuoteDialogProps {
   open: boolean;
@@ -513,15 +514,22 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
     );
   };
 
-  // 計算總價和主要幣別
+  // 計算總價（轉換為 TWD 後相加）
   const calculateTotalAndCurrency = () => {
-    if (lineItems.length === 0) return { total: 0, currency: 'USD' };
+    if (lineItems.length === 0) return { total: 0, currency: 'TWD' };
 
-    const total = lineItems.reduce((sum, item) => sum + item.cost, 0);
+    const totalTWD = calculateTotalTWD(lineItems);
     const currencies = [...new Set(lineItems.map(item => item.currency))];
-    const currency = currencies.length === 1 ? currencies[0] : 'USD'; // 如果有多種幣別，預設為 USD
 
-    return { total, currency };
+    // 如果只有一種貨幣，使用該貨幣顯示總價
+    if (currencies.length === 1) {
+      const currency = currencies[0];
+      const total = convertFromTWD(totalTWD, currency);
+      return { total, currency };
+    }
+
+    // 如果有多種貨幣，顯示 TWD 總價
+    return { total: totalTWD, currency: 'TWD' };
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -927,7 +935,7 @@ export function AddQuoteDialog({ open, onOpenChange, editingQuote, onSubmit }: A
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-blue-900">總計：</span>
                 <span className="text-lg font-bold text-blue-900">
-                  {calculateTotalAndCurrency().currency} ${calculateTotalAndCurrency().total.toLocaleString()}
+                  {getCurrencySymbol(calculateTotalAndCurrency().currency)} {calculateTotalAndCurrency().total.toLocaleString()}
                 </span>
               </div>
             </div>
